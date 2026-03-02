@@ -216,16 +216,21 @@ class WearDataListenerService : WearableListenerService() {
             }
 
             WearDataPaths.TRANSFER_METADATA -> {
-                try {
-                    val metadataJson = String(messageEvent.data, Charsets.UTF_8)
-                    val metadata = json.decodeFromString<WearTransferMetadata>(metadataJson)
-                    transferRepository.onMetadataReceived(metadata)
-                    Timber.tag(TAG).d(
-                        "Received transfer metadata: ${metadata.title}, " +
-                            "fileSize=${metadata.fileSize}, requestId=${metadata.requestId}"
-                    )
-                } catch (e: Exception) {
-                    Timber.tag(TAG).e(e, "Failed to process transfer metadata")
+                scope.launch {
+                    try {
+                        val metadataJson = String(messageEvent.data, Charsets.UTF_8)
+                        val metadata = json.decodeFromString<WearTransferMetadata>(metadataJson)
+                        transferRepository.onMetadataReceived(
+                            metadata = metadata,
+                            sourceNodeId = messageEvent.sourceNodeId,
+                        )
+                        Timber.tag(TAG).d(
+                            "Received transfer metadata: ${metadata.title}, " +
+                                "fileSize=${metadata.fileSize}, requestId=${metadata.requestId}"
+                        )
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Failed to process transfer metadata")
+                    }
                 }
             }
 

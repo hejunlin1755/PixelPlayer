@@ -155,6 +155,17 @@ class WearTransferRepository @Inject constructor(
         }
 
         scope.launch {
+            val existingSong = localSongDao.getSongById(songId)
+            if (existingSong?.hasPlayableLocalFile() == true) {
+                notifyPhoneTransferFailure(
+                    targetNodeId = targetNodeId,
+                    requestId = requestId,
+                    songId = songId,
+                    message = WearTransferProgress.ERROR_ALREADY_ON_WATCH,
+                )
+                return@launch
+            }
+
             clearStaleTransfersForSong(songId)
             songToRequestId[songId] = requestId
 
@@ -202,10 +213,46 @@ class WearTransferRepository @Inject constructor(
         }
     }
 
+    private suspend fun notifyPhoneTransferFailure(
+        targetNodeId: String?,
+        requestId: String,
+        songId: String,
+        message: String,
+    ) {
+        Timber.tag(TAG).d(
+            "Rejecting transfer requestId=%s songId=%s: %s",
+            requestId,
+            songId,
+            message,
+        )
+        if (targetNodeId == null) return
+
+        runCatching {
+            val progress = WearTransferProgress(
+                requestId = requestId,
+                songId = songId,
+                bytesTransferred = 0L,
+                totalBytes = 0L,
+                status = WearTransferProgress.STATUS_FAILED,
+                error = message,
+            )
+            messageClient.sendMessage(
+                targetNodeId,
+                WearDataPaths.TRANSFER_PROGRESS,
+                json.encodeToString(progress).toByteArray(Charsets.UTF_8),
+            ).await()
+        }.onFailure { error ->
+            Timber.tag(TAG).w(error, "Failed to report transfer failure to phone")
+        }
+    }
+
     /**
      * Called when metadata arrives from the phone (before the audio channel opens).
      */
-    fun onMetadataReceived(metadata: WearTransferMetadata) {
+    suspend fun onMetadataReceived(
+        metadata: WearTransferMetadata,
+        sourceNodeId: String? = null,
+    ) {
         if (isTransferCancelled(metadata.requestId)) {
             cleanupCancelledTransfer(metadata.requestId, metadata.songId)
             return
@@ -214,6 +261,21 @@ class WearTransferRepository @Inject constructor(
         if (errorMsg != null) {
             Timber.tag(TAG).w("Transfer rejected by phone: $errorMsg")
             handleTransferError(metadata.requestId, metadata.songId, errorMsg)
+            return
+        }
+        val existingSong = localSongDao.getSongById(metadata.songId)
+        if (existingSong?.hasPlayableLocalFile() == true) {
+            notifyPhoneTransferFailure(
+                targetNodeId = sourceNodeId,
+                requestId = metadata.requestId,
+                songId = metadata.songId,
+                message = WearTransferProgress.ERROR_ALREADY_ON_WATCH,
+            )
+            handleTransferError(
+                requestId = metadata.requestId,
+                songId = metadata.songId,
+                message = WearTransferProgress.ERROR_ALREADY_ON_WATCH,
+            )
             return
         }
 
