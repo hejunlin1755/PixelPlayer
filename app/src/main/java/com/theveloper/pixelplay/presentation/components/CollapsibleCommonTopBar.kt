@@ -17,8 +17,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
@@ -35,6 +37,9 @@ fun CollapsibleCommonTopBar(
     collapsedTitleEndPadding: Dp = 24.dp,
     expandedTitleEndPadding: Dp = 24.dp,
     containerHeightRange: Pair<Dp, Dp> = 88.dp to 56.dp,
+    titleStyle: TextStyle = MaterialTheme.typography.headlineMedium,
+    titleScaleRange: Pair<Float, Float> = 1.2f to 0.8f,
+    titleFontSizeRange: Pair<TextUnit, TextUnit>? = null,
     maxLines: Int = 1,
     collapsedSubtitleMaxLines: Int = 1,
     expandedSubtitleMaxLines: Int = 1,
@@ -104,6 +109,9 @@ fun CollapsibleCommonTopBar(
                 collapsedTitleEndPadding = collapsedTitleEndPadding,
                 expandedTitleEndPadding = expandedTitleEndPadding,
                 containerHeightRange = containerHeightRange,
+                titleStyle = titleStyle,
+                titleScaleRange = titleScaleRange,
+                titleFontSizeRange = titleFontSizeRange,
                 maxLines = maxLines,
                 collapsedSubtitleMaxLines = collapsedSubtitleMaxLines,
                 expandedSubtitleMaxLines = expandedSubtitleMaxLines,

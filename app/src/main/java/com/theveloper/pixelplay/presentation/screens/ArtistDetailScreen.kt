@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.theveloper.pixelplay.ui.theme.LocalPixelPlayDarkTheme
+import com.theveloper.pixelplay.ui.theme.GoogleSansRounded
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.util.lerp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -717,6 +718,8 @@ private fun SharedArtistTopBarProbe(
     val statusBarBrush = remember(statusBarColor) {
         Brush.verticalGradient(colors = listOf(statusBarColor, Color.Transparent))
     }
+    val titleVerticalBias = lerp(1f, -1f, collapseFraction)
+    val shuffleAlignment = BiasAlignment(horizontalBias = 1f, verticalBias = titleVerticalBias)
 
     Box(
         modifier = Modifier
@@ -766,11 +769,18 @@ private fun SharedArtistTopBarProbe(
             headerHeight = headerHeight,
             onBackClick = onBackPressed,
             containerColor = surfaceColor.copy(alpha = solidAlpha),
-            collapsedTitleStartPadding = 80.dp,
+            collapsedTitleStartPadding = 68.dp,
             expandedTitleStartPadding = 24.dp,
             collapsedTitleEndPadding = 88.dp,
             expandedTitleEndPadding = 136.dp,
             containerHeightRange = 92.dp to 56.dp,
+            titleStyle = MaterialTheme.typography.headlineMedium.copy(
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.SemiBold,
+                textGeometricTransform = TextGeometricTransform(scaleX = 1.08f)
+            ),
+            titleScaleRange = 1f to 1f,
+            titleFontSizeRange = 30.sp to 18.sp,
             maxLines = if (collapseFraction < 0.5f) 2 else 1,
             collapsedSubtitleMaxLines = 1,
             expandedSubtitleMaxLines = 2,
@@ -828,8 +838,9 @@ private fun SharedArtistTopBarProbe(
             onClick = onPlayClick,
             shape = RoundedStarShape(sides = 8, curve = 0.05, rotation = 0f),
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
+                .align(shuffleAlignment)
+                .statusBarsPadding()
+                .padding(end = 16.dp)
                 .graphicsLayer {
                     scaleX = expandedContentAlpha
                     scaleY = expandedContentAlpha

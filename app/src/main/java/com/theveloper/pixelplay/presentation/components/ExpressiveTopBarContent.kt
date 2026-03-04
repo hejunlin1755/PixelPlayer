@@ -15,7 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.util.lerp
@@ -32,6 +34,9 @@ fun ExpressiveTopBarContent(
     expandedTitleEndPadding: Dp = 24.dp,
     containerHeightRange: Pair<Dp, Dp> = 88.dp to 56.dp,
     collapsedTitleVerticalBias: Float = -1f,
+    titleStyle: TextStyle = MaterialTheme.typography.headlineMedium,
+    titleScaleRange: Pair<Float, Float> = 1.2f to 0.8f,
+    titleFontSizeRange: Pair<TextUnit, TextUnit>? = null,
     maxLines: Int = 2,
     collapsedSubtitleMaxLines: Int = 1,
     expandedSubtitleMaxLines: Int = 1,
@@ -41,7 +46,7 @@ fun ExpressiveTopBarContent(
     supportingContent: (@Composable () -> Unit)? = null
 ) {
     val clampedFraction = collapseFraction.coerceIn(0f, 1f)
-    val titleScale = lerp(1.2f, 0.8f, clampedFraction)
+    val titleScale = lerp(titleScaleRange.first, titleScaleRange.second, clampedFraction)
     val titlePaddingStart = lerp(expandedTitleStartPadding, collapsedTitleStartPadding, clampedFraction)
     val titlePaddingEnd = lerp(expandedTitleEndPadding, collapsedTitleEndPadding, clampedFraction)
     val titleVerticalBias = lerp(1f, collapsedTitleVerticalBias, clampedFraction)
@@ -49,6 +54,7 @@ fun ExpressiveTopBarContent(
     val titleContainerHeight = lerp(containerHeightRange.first, containerHeightRange.second, clampedFraction)
     val subtitleAlpha = if (fadeSubtitleOnCollapse) 1f - clampedFraction else 1f
     val subtitleMaxLines = if (clampedFraction < 0.5f) expandedSubtitleMaxLines else collapsedSubtitleMaxLines
+    val titleFontSize = titleFontSizeRange?.let { lerp(it.first, it.second, clampedFraction) } ?: titleStyle.fontSize
 
     Box(modifier = modifier.fillMaxSize()) {
         Box(
@@ -63,12 +69,12 @@ fun ExpressiveTopBarContent(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = titleStyle.copy(fontSize = titleFontSize),
                     fontWeight = FontWeight.Bold,
                     color = contentColor,
                     maxLines = maxLines,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    lineHeight = MaterialTheme.typography.headlineMedium.fontSize * 1.1f, // Slight breathing room
+                    lineHeight = titleFontSize * 1.1f,
                     modifier = Modifier.graphicsLayer {
                         scaleX = titleScale
                         scaleY = titleScale
