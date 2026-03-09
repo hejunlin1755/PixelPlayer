@@ -88,7 +88,7 @@ fun Beta05CleanInstallDisclaimerDialog(
                                 color = MaterialTheme.colorScheme.secondaryContainer,
                             ) {
                                 Text(
-                                    text = "Beta 0.5 upgrade",
+                                    text = "Beta 0.5.0 upgrade",
                                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,

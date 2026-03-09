@@ -71,6 +71,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -130,6 +131,15 @@ import java.util.Locale
 import kotlin.math.roundToLong
 import com.theveloper.pixelplay.presentation.components.WavySliderExpressive
 import com.theveloper.pixelplay.presentation.components.ToggleSegmentButton
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collect
+
+private const val PREVIOUS_TRACK_RESTART_THRESHOLD_MS = 10_000L
+private const val SPAM_SKIP_SERIALIZATION_MS = 360L
+private const val NO_TARGET_SKIP_SERIALIZATION_MS = 140L
+
+private enum class SkipDirection { PREVIOUS, NEXT }
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @SuppressLint("StateFlowValueCalledInComposition")
@@ -337,6 +347,94 @@ fun FullPlayerContent(
         }
     }
 
+    var pendingCarouselSongId by remember { mutableStateOf<String?>(null) }
+    val pendingCarouselIndex = remember(pendingCarouselSongId, currentPlaybackQueue) {
+        pendingCarouselSongId?.let { targetSongId ->
+            currentPlaybackQueue.indexOfFirst { it.id == targetSongId }
+                .takeIf { it >= 0 }
+        }
+    }
+    val skipRequests = remember {
+        MutableSharedFlow<SkipDirection>(
+            extraBufferCapacity = 16,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
+    }
+    val latestQueue by rememberUpdatedState(currentPlaybackQueue)
+    val latestSongId by rememberUpdatedState(song.id)
+    val latestRepeatMode by rememberUpdatedState(repeatMode)
+    val latestIsRemotePlaybackActive by rememberUpdatedState(isRemotePlaybackActive)
+    val latestCurrentPositionProvider by rememberUpdatedState(currentPositionProvider)
+    val latestOnNext by rememberUpdatedState(onNext)
+    val latestOnPrevious by rememberUpdatedState(onPrevious)
+
+    LaunchedEffect(song.id, pendingCarouselSongId) {
+        if (pendingCarouselSongId == song.id) {
+            pendingCarouselSongId = null
+        }
+    }
+
+    LaunchedEffect(pendingCarouselSongId, song.id) {
+        val targetSongId = pendingCarouselSongId ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(900)
+        if (pendingCarouselSongId == targetSongId && song.id != targetSongId) {
+            pendingCarouselSongId = null
+        }
+    }
+
+    LaunchedEffect(skipRequests) {
+        skipRequests.collect { direction ->
+            val queueSnapshot = latestQueue
+            val baseSongId = pendingCarouselSongId ?: latestSongId
+            val predictedTargetIndex = when (direction) {
+                SkipDirection.NEXT -> predictSkipNextCarouselIndex(
+                    currentSongId = baseSongId,
+                    queue = queueSnapshot,
+                    repeatMode = latestRepeatMode,
+                    isRemotePlaybackActive = latestIsRemotePlaybackActive
+                )
+                SkipDirection.PREVIOUS -> predictSkipPreviousCarouselIndex(
+                    currentSongId = baseSongId,
+                    queue = queueSnapshot,
+                    currentPositionMs = latestCurrentPositionProvider(),
+                    repeatMode = latestRepeatMode,
+                    isRemotePlaybackActive = latestIsRemotePlaybackActive
+                )
+            }
+            val predictedTargetSongId = predictedTargetIndex
+                ?.let(queueSnapshot::getOrNull)
+                ?.id
+
+            if (predictedTargetSongId != null) {
+                pendingCarouselSongId = predictedTargetSongId
+
+                // Start the pager motion before MediaController listeners fan out
+                // the full track transition state updates through the player UI.
+                withFrameNanos { }
+            }
+
+            when (direction) {
+                SkipDirection.NEXT -> latestOnNext()
+                SkipDirection.PREVIOUS -> latestOnPrevious()
+            }
+
+            kotlinx.coroutines.delay(
+                if (predictedTargetSongId != null) SPAM_SKIP_SERIALIZATION_MS
+                else NO_TARGET_SKIP_SERIALIZATION_MS
+            )
+        }
+    }
+
+    val onNextWithOptimisticCarousel = {
+        skipRequests.tryEmit(SkipDirection.NEXT)
+        Unit
+    }
+
+    val onPreviousWithOptimisticCarousel = {
+        skipRequests.tryEmit(SkipDirection.PREVIOUS)
+        Unit
+    }
+
     val albumCoverSection: @Composable (Modifier) -> Unit = { modifier ->
         FullPlayerAlbumCoverSection(
             song = song,
@@ -351,6 +449,7 @@ fun FullPlayerContent(
             placeholderColor = placeholderColor,
             placeholderOnColor = placeholderOnColor,
             albumArtQuality = albumArtQuality,
+            requestedScrollIndex = pendingCarouselIndex,
             onSongSelected = onAlbumSongSelected,
             modifier = modifier
         )
@@ -387,9 +486,9 @@ fun FullPlayerContent(
             placeholderColor = placeholderColor,
             placeholderOnColor = placeholderOnColor,
             isPlayingProvider = isPlayingProvider,
-            onPrevious = onPrevious,
+            onPrevious = onPreviousWithOptimisticCarousel,
             onPlayPause = onPlayPause,
-            onNext = onNext,
+            onNext = onNextWithOptimisticCarousel,
             playerSecondaryAccentColor = playerSecondaryAccentColor,
             playerAccentColor = playerAccentColor,
             playerOnAccentColor = playerOnAccentColor,
@@ -862,6 +961,7 @@ private fun FullPlayerAlbumCoverSection(
     placeholderColor: Color,
     placeholderOnColor: Color,
     albumArtQuality: AlbumArtQuality,
+    requestedScrollIndex: Int?,
     onSongSelected: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -928,6 +1028,7 @@ private fun FullPlayerAlbumCoverSection(
                 currentSong = song,
                 queue = currentPlaybackQueue,
                 expansionFraction = 1f,
+                requestedScrollIndex = requestedScrollIndex,
                 onSongSelected = { newSong ->
                     if (newSong.id != song.id) {
                         onSongSelected(newSong)
@@ -1078,6 +1179,44 @@ private fun FullPlayerProgressSection(
         isSheetDragGestureActive = isSheetDragGestureActive,
         loadingTweaks = loadingTweaks
     )
+}
+
+private fun predictSkipNextCarouselIndex(
+    currentSongId: String,
+    queue: ImmutableList<Song>,
+    repeatMode: Int,
+    isRemotePlaybackActive: Boolean
+): Int? {
+    if (isRemotePlaybackActive || queue.size <= 1) return null
+
+    val currentIndex = queue.indexOfFirst { it.id == currentSongId }
+    if (currentIndex == -1) return null
+
+    return when {
+        currentIndex < queue.lastIndex -> currentIndex + 1
+        repeatMode == Player.REPEAT_MODE_ALL -> 0
+        else -> null
+    }
+}
+
+private fun predictSkipPreviousCarouselIndex(
+    currentSongId: String,
+    queue: ImmutableList<Song>,
+    currentPositionMs: Long,
+    repeatMode: Int,
+    isRemotePlaybackActive: Boolean
+): Int? {
+    if (isRemotePlaybackActive || queue.size <= 1) return null
+    if (currentPositionMs > PREVIOUS_TRACK_RESTART_THRESHOLD_MS) return null
+
+    val currentIndex = queue.indexOfFirst { it.id == currentSongId }
+    if (currentIndex == -1) return null
+
+    return when {
+        currentIndex > 0 -> currentIndex - 1
+        repeatMode == Player.REPEAT_MODE_ALL -> queue.lastIndex
+        else -> null
+    }
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
