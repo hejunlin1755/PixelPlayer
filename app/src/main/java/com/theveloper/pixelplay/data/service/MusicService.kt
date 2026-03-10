@@ -587,8 +587,11 @@ class MusicService : MediaLibraryService() {
                         }
                     }
                     resolveMediaItemsByIds(mediaItems).also { resolvedItems ->
-                        grantArtworkUriPermissions(controller.packageName, resolvedItems)
-                    }
+                        grantArtworkUriPermissions(
+                            controller.packageName,
+                            resolvedItems.trustedArtworkGrantItems
+                        )
+                    }.mediaItems
                 }
             }
 
@@ -616,13 +619,16 @@ class MusicService : MediaLibraryService() {
                     }
 
                     val resolvedItems = resolveMediaItemsByIds(mediaItems)
-                    grantArtworkUriPermissions(controller.packageName, resolvedItems)
+                    grantArtworkUriPermissions(
+                        controller.packageName,
+                        resolvedItems.trustedArtworkGrantItems
+                    )
                     val safeStartIndex = requestedIndex.coerceIn(
                         0,
-                        (resolvedItems.size - 1).coerceAtLeast(0)
+                        (resolvedItems.mediaItems.size - 1).coerceAtLeast(0)
                     )
                     MediaSession.MediaItemsWithStartPosition(
-                        resolvedItems,
+                        resolvedItems.mediaItems,
                         safeStartIndex,
                         startPositionMs
                     )
@@ -2133,16 +2139,18 @@ class MusicService : MediaLibraryService() {
         )
     }
 
-    private suspend fun resolveMediaItemsByIds(requestedItems: List<MediaItem>): MutableList<MediaItem> {
+    private suspend fun resolveMediaItemsByIds(
+        requestedItems: List<MediaItem>
+    ): TrustedMediaItemsResolution {
         val songIds = requestedItems.map { it.mediaId }
         val songs = musicRepository.getSongsByIds(songIds).first()
         val songMap = songs.associateBy { it.id }
 
-        return requestedItems.map { requestedItem ->
-            songMap[requestedItem.mediaId]?.let { song ->
+        return resolveMediaItemsWithTrustedArtworkGrants(requestedItems) { mediaId ->
+            songMap[mediaId]?.let { song ->
                 MediaItemBuilder.buildForExternalController(this, song)
-            } ?: requestedItem
-        }.toMutableList()
+            }
+        }
     }
 
     private fun grantArtworkUriPermissions(
