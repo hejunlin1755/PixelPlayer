@@ -254,10 +254,8 @@ class SongMetadataEditor(
 
                 coverArtUpdate?.let {
                     AlbumArtUtils.clearCacheForSong(context, songId)
-                    storedCoverArtUri = LocalArtworkUri.buildSongUriWithTimestamp(songId)
-                    storedCoverArtUri?.let { coverUri ->
-                        musicDao.updateSongAlbumArt(songId, coverUri)
-                    }
+                    storedCoverArtUri = if (it.isDeletion) null else LocalArtworkUri.buildSongUriWithTimestamp(songId)
+                    musicDao.updateSongAlbumArt(songId, storedCoverArtUri)
                 }
             }
 
@@ -442,18 +440,29 @@ class SongMetadataEditor(
 
                 // Update cover art if provided
                 coverArtUpdate?.let { update ->
-                    val picture = Picture(
-                        data = update.bytes,
-                        description = "Front Cover",
-                        pictureType = "Front Cover",
-                        mimeType = update.mimeType
-                    )
-                    val pictureFd = fd.dup()
-                    val coverSaved = TagLib.savePictures(pictureFd.detachFd(), arrayOf(picture))
-                    if (!coverSaved) {
-                        Log.w(TAG, "TAGLIB: Failed to save cover art, but metadata was saved")
+                    val pictures = if (update.isDeletion) {
+                        emptyArray<Picture>()
+                    } else if (update.bytes != null) {
+                        arrayOf(
+                            Picture(
+                                data = update.bytes,
+                                description = "Front Cover",
+                                pictureType = "Front Cover",
+                                mimeType = update.mimeType
+                            )
+                        )
                     } else {
-                        Log.d(TAG, "TAGLIB: Successfully embedded cover art")
+                        null
+                    }
+
+                    pictures?.let {
+                        val pictureFd = fd.dup()
+                        val coverSaved = TagLib.savePictures(pictureFd.detachFd(), it)
+                        if (!coverSaved) {
+                            Log.w(TAG, "TAGLIB: Failed to save cover art, but metadata was saved")
+                        } else {
+                            Log.d(TAG, "TAGLIB: Successfully ${if (update.isDeletion) "removed" else "embedded"} cover art")
+                        }
                     }
                 }
             }
@@ -732,8 +741,9 @@ data class SongMetadataEditResult(
 )
 
 data class CoverArtUpdate(
-    val bytes: ByteArray,
-    val mimeType: String = "image/jpeg"
+    val bytes: ByteArray? = null,
+    val mimeType: String = "image/jpeg",
+    val isDeletion: Boolean = false
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
