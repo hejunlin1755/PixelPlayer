@@ -1149,12 +1149,12 @@ fun LyricLineRow(
         ) else tween(durationMillis = 200),
         label = "lineAlpha"
     )
-    
+
     // Blur Effect
     val targetBlur = if (useAnimatedLyrics && animatedLyricsBlurEnabled && distanceFromCurrent > 0) {
         (distanceFromCurrent * animatedLyricsBlurStrength).coerceAtMost(10f).dp
     } else 0.dp
-    
+
     val blurRadius by animateDpAsState(
         targetValue = targetBlur,
         animationSpec = if (useAnimatedLyrics) tween(durationMillis = 400) else tween(durationMillis = 200),
@@ -1189,9 +1189,13 @@ fun LyricLineRow(
             .then(if (blurRadius > 0.dp) Modifier.blur(blurRadius) else Modifier)
     } else baseModifier
 
+    // Roman Translate Logic
     val translationText = line.translation
     val translationStyle = remember(style) {
-        style.copy(fontSize = style.fontSize * 0.75f)
+        style.copy(
+            fontSize = (style.fontSize.value * 0.75f).sp,
+            fontWeight = FontWeight.Normal
+        )
     }
     val translationColor = lineColor.copy(alpha = lineColor.alpha * 0.7f)
 
@@ -1244,7 +1248,7 @@ fun LyricLineRow(
                     style = translationStyle,
                     color = translationColor,
                     textAlign = textAlign,
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
         }
@@ -1294,7 +1298,7 @@ fun LyricLineRow(
                     style = translationStyle,
                     color = translationColor,
                     textAlign = textAlign,
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.padding(top = 4.dp)
                 )
             }
         }
@@ -1344,20 +1348,42 @@ fun PlainLyricsLine(
     line: String,
     style: TextStyle,
     lyricsAlignment: String = "left",
+    showTranslation: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    val sanitizedLine = remember(line) { sanitizeLyricLineText(line) }
-    Text(
-        text = sanitizedLine,
-        style = style,
-        color = LocalContentColor.current.copy(alpha = 0.7f),
-        textAlign = when (lyricsAlignment) {
-            "center" -> TextAlign.Center
-            "right" -> TextAlign.Right
-            else -> TextAlign.Left
-        },
-        modifier = modifier
-    )
+    val sanitizedLines = remember(line) { line.split("\n") }
+    val primaryText = remember(sanitizedLines) { if (sanitizedLines.isNotEmpty()) sanitizeLyricLineText(sanitizedLines[0]) else "" }
+
+    val translationText = remember(sanitizedLines) {
+        if (sanitizedLines.size > 1) sanitizedLines.drop(1).joinToString("\n") { sanitizeLyricLineText(it) } else ""
+    }
+
+    val textAlign = when (lyricsAlignment) { "center" -> TextAlign.Center; "right" -> TextAlign.Right; else -> TextAlign.Left }
+    val horizontalAlignment = when (lyricsAlignment) { "center" -> Alignment.CenterHorizontally; "right" -> Alignment.End; else -> Alignment.Start }
+
+    val translationStyle = remember(style) {
+        style.copy(
+            fontSize = (style.fontSize.value * 0.75f).sp,
+            fontWeight = FontWeight.Normal
+        )
+    }
+    val translationColor = LocalContentColor.current.copy(alpha = 0.45f)
+
+    Column(modifier = modifier, horizontalAlignment = horizontalAlignment) {
+        if (primaryText.isNotBlank()) {
+            Text(text = primaryText, style = style, color = LocalContentColor.current.copy(alpha = 0.7f), textAlign = textAlign)
+
+            if (showTranslation && translationText.isNotBlank()) {
+                Text(
+                    text = translationText,
+                    style = translationStyle,
+                    color = translationColor,
+                    textAlign = textAlign,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
 }
 
 private val LeadingTagRegex = Regex("^v\\d+:\\s*", RegexOption.IGNORE_CASE)
