@@ -28,7 +28,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
@@ -689,7 +691,35 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = {
-                    if (!shouldHideNavigationBar) {
+                    AnimatedVisibility(
+                        visible = !shouldHideNavigationBar,
+                        enter = slideInVertically(
+                            animationSpec = tween(
+                                durationMillis = 220,
+                                easing = LinearOutSlowInEasing
+                            ),
+                            initialOffsetY = { fullHeight -> fullHeight }
+                        ) + expandVertically(
+                            animationSpec = tween(
+                                durationMillis = 220,
+                                easing = LinearOutSlowInEasing
+                            ),
+                            expandFrom = Alignment.Bottom
+                        ),
+                        exit = slideOutVertically(
+                            animationSpec = tween(
+                                durationMillis = 180,
+                                easing = LinearOutSlowInEasing
+                            ),
+                            targetOffsetY = { fullHeight -> fullHeight }
+                        ) + shrinkVertically(
+                            animationSpec = tween(
+                                durationMillis = 180,
+                                easing = LinearOutSlowInEasing
+                            ),
+                            shrinkTowards = Alignment.Bottom
+                        )
+                    ) {
                         val playerContentExpansionFraction = playerViewModel.playerContentExpansionFraction.value
                         val currentSongId by remember {
                             playerViewModel.stablePlayerState
