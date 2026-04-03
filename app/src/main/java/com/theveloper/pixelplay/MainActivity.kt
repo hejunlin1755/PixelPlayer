@@ -176,6 +176,11 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        val locale = Locale.CHINA
+        Locale.setDefault(locale)
+        val config = Configuration()
+        config.locale = locale
+        resources.updateConfiguration(config, resources.displayMetrics)
         LogUtils.d(this, "onCreate")
         val splashScreen = installSplashScreen()
         enableEdgeToEdge(
